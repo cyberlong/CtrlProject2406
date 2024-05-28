@@ -1,4 +1,6 @@
-  
+/*
+This library while useful inside development, it isn't used in the final product
+*/  
 
 #define SerialReady 69420
 #define Order1      69421
