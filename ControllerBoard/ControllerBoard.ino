@@ -1,3 +1,6 @@
+#include <HardwareSerial.h>
+
+
 // Motor Pins
 #define MOT1P 18
 #define MOT1N 19
@@ -16,6 +19,10 @@
 #define LS1  27
 #define LS2  35
 
+// UART Pins
+#define rx2  16
+#define tx2  17
+
 // Motor Control
 bool MOT1D = 0;     // Direction
 bool MOT2D = 1;
@@ -32,18 +39,18 @@ volatile int MOT2CS = 0;
 #define Tm 30   // ms
 #define PPT 60.0                  // Pulses per turn
 #define mmPT 12.0                 // Milimeter per turn
-#define RPS2RPM 60              // rev per sec to rev per minute
-#define RPS2RadPs 2 * 3.141592  // rev per sec to rad per sec
-#define alph 0.2                // Alpha for EMA
+#define RPS2RPM 60                // rev per sec to rev per minute
+#define RPS2RadPs 2 * 3.141592    // rev per sec to rad per sec
+#define alph 0.2                  // Alpha for EMA
 float toCTRL = 0;
 uint8_t PWM = 0;
 uint8_t codPins[][2] = {{CodA, CodB},{CodC, CodD}}; // encoder pins
-volatile int encoderValue[]   = {0,0};           // the current value
-volatile uint32_t last_time[] = {0,0};           // for debouncing the encoder
-volatile float EMAprev[]      = {0,0};           // for EMAprev
-volatile float linearValue[]  = {0,0};           // Axis linear value
-float setPoint[]     = {0,0};           // The setppointa
-uint32_t staticTime[]= {0,0};           // stebilize chepoint
+volatile int encoderValue[]   = {0,0};              // the current value
+volatile uint32_t last_time[] = {0,0};              // for debouncing the encoder
+volatile float EMAprev[]      = {0,0};              // for EMAprev
+volatile float linearValue[]  = {0,0};              // Axis linear value
+float setPoint[]     = {0,0};                       // The setpoints
+uint32_t staticTime[]= {0,0};                       // stabilize chepoint
 
 // PID params and Vars
 #define PID_Kp 1
@@ -55,7 +62,19 @@ float PID_Imem = 0;
 // System Objects
 hw_timer_t* timer = NULL;
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+HardwareSerial daServer(2);
 
+// UART vars
+String iStr = "";
+bool thereIsInput = false;
+bool requestSP = false;
+char *ptr = NULL;
+char *strings[8];
+float newSP[] = {0,0};
+bool  isWiFiOk = false;
+char  ssid[20];
+char  ipaddress[20];
+float scrPos[] = {0,0};
 
 //    <===========================Asyncronous Functions==============================>
 
@@ -128,6 +147,9 @@ void UpDtEnc(volatile uint32_t* Ltiem, volatile int* encVal, uint8_t pins[]){
 //    <===========================SETUP==============================>
 
 void setup() {
+  Serial.begin(9600);
+  // Start Serial port with Server from UART
+  daServer.begin(9600);
   // Timer at Clk hz, 1 Mhz is used to have 1us steps
   timer = timerBegin(Clk);
   // interrupt using the address of the ISR
@@ -145,16 +167,77 @@ void setup() {
 //    <===========================LOOPING==============================>
 
 void loop() {
+
+  serialEvent();
+  serialAssign();
+
+  if (thereIsInput){
+    // do smth
+    
+    
+    // reset
+    iStr = "";
+    thereIsInput = false;
+  }
+
   SPHandler(&setPoint[MOT1],linearValue[MOT1],&staticTime[MOT1]);
   SPHandler(&setPoint[MOT2],linearValue[MOT2],&staticTime[MOT2]);
 
   CSMotCtrl(setPoint[MOT1],MOT1,1);
   CSMotCtrl(setPoint[MOT2],MOT2,1);
 
+  serialInform();
+
   // Debug
   db_LinearLCDprint();
 
   delay(5);
+}
+
+void serialEvent(){
+  while (daServer.available() > 0){
+    char c = (char) daServer.read();
+    if (c != '\n'){
+      iStr += c;
+    } else {
+      iStr.trim();
+      thereIsInput = true;
+    }
+  }
+}
+
+  // Str format: "a:112,b:124,c:e\n";
+  // We finish a message with '\n' from println();
+  // Every bit of information we separate with a comma ',';
+  // This is basically a CSV RipOff.
+void serialInform(){
+  String forward = "";
+  // forward += S_ReqSP + ':'; // Request a Setpoint
+  forward += requestSP; 
+  daServer.println(forward);
+
+  if (0) Serial.println(forward);
+}
+
+void serialAssign(){
+  byte index = 0;
+  char buffer[sizeof(iStr)];
+  iStr.toCharArray(buffer, iStr.length()+1);
+  ptr = strtok(buffer, ",");  // delimiter
+  while (ptr != NULL)
+  {
+     strings[index] = ptr;
+     index++;
+     ptr = strtok(NULL, ",");
+  }
+
+  newSP[0]  = atof(strings[0]);
+  newSP[1]  = atof(strings[1]);
+  isWiFiOk  = atoi(strings[2]);
+  strncpy(ssid, strings[3],20);
+  strncpy(ipaddress,strings[4],20);
+  scrPos[0] = atof(strings[5]);
+  scrPos[1] = atof(strings[6]);
 }
 
 /* It handles the Setpoints */
