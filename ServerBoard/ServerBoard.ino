@@ -4,7 +4,6 @@
 #include <LiquidCrystal_I2C.h>
 #include "Pages.h"
 #include "CustomChars.h"
-#include "messageTypes.h"
 
 // WiFi connect
 #define WbQty 4
