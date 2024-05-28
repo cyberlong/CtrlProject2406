@@ -4,6 +4,7 @@
 #include <LiquidCrystal_I2C.h>
 #include "Pages.h"
 #include "CustomChars.h"
+#include "messageTypes.h"
 
 // WiFi connect
 #define WbQty 4
@@ -15,14 +16,24 @@ uint8_t tryIndex = 0;
 // System Objects
 WebServer server(80);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+HardwareSerial daController(2);
+
+// UART vars
+String iStr = "";
+bool thereIsInput = false;
+float nextSP[] = {0,0};
+char *ptr = NULL;
+char *strings[8];
+bool plzSP = false;
+
 
 //    <===========================SETUP==============================>
 void setup() {
-  // timerAttachInterrupt(timer, &Measure);
+  Serial.begin(9600);
+  // Start Serial port with Server from UART
+  daController.begin(9600);
   // Initialize the LCD through I2C, along with custom chars
   LCDinit();
-  // Configure the pins as needed
-  // ConfigurePins();
   // Starts the connection process to WiFi
   xTaskCreatePinnedToCore(
         InitWiFiConTask, /* Function to implement the task */
@@ -50,6 +61,79 @@ void InitWiFiConTask(void * parameter){
 //    <===========================LOOPING==============================>
 void loop() {
   server.handleClient(); // it explains itself
+
+  serialEvent();
+  serialAssign();
+  
+  // When the Controller sends a message, what to do?
+  if (thereIsInput){
+    // do smth
+    
+    
+    // reset
+    iStr = "";
+    thereIsInput = false;
+  }
+
+    serialInform();
+
+    delay(5);
+}
+
+void serialEvent(){
+  while (daController.available() > 0){
+    char c = (char) daController.read();
+    if (c != '\n'){
+      iStr += c;
+    } else {
+      iStr.trim();
+      thereIsInput = true;
+    }
+  }
+}
+
+  // Str format: "a:112,b:124,c:e\n";
+  // We finish a message with '\n' from println();
+  // Every pair of information we separate with a comma ',';
+  // The key and the value are separated by a colon ':';
+  // This is basically a Json RipOff.
+void serialInform(){
+  String forward = "";
+  // forward += S_NextSPx + ':'; // next X SP
+  forward += 420;
+  forward += ','; //+ S_NextSPy + ':'; // next Y SP
+  forward += 69;
+  forward += ','; //+ S_WiFiOK + ':'; // is WiFi Ok?
+  forward += WiFi.status() == WL_CONNECTED;
+  forward += ','; //+ S_SSID + ':'; // what is the connected SSID
+  forward += ssid[tryIndex];
+  forward += ','; //+ S_IP + ':'; // Connection IP plz
+  forward += WiFi.localIP();
+  forward += ','; //+ S_ScreenX + ':'; // current X Screen Pos
+  forward += 69;
+  forward += ','; //+ S_ScreenY + ':'; // current Y Screen Pos
+  forward += 420;
+  
+  daController.println(forward);
+
+  if (0) Serial.println(forward);
+}
+
+void serialAssign(){
+  byte index = 0;
+  char buffer[sizeof(iStr)];
+  iStr.toCharArray(buffer, iStr.length()+1);
+  ptr = strtok(buffer, ",");  // delimiter
+  while (ptr != NULL)
+  {
+     strings[index] = ptr;
+     index++;
+     ptr = strtok(NULL, ",");
+  }
+
+   plzSP = atoi(strings[0]);
+
+   
 }
 
 //    <===========================WEB_PAGES==============================>
