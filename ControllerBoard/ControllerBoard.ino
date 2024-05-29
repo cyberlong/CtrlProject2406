@@ -2,22 +2,22 @@
 
 
 // Motor Pins
-#define MOT1P 18
-#define MOT1N 19
-#define MOT2P 16
-#define MOT2N 17
+#define MOT1P 15
+#define MOT1N 2
+#define MOT2P 4
+#define MOT2N 5
 #define MOT1  0
 #define MOT2  1
 
 // Pins of the encoders
-#define CodA 25
-#define CodB 26
-#define CodC 32
-#define CodD 33
+#define CodA 14
+#define CodB 27
+#define CodC 26
+#define CodD 25
 
 // Pins of the Limit Switches
-#define LS1  27
-#define LS2  35
+#define LS1  12
+#define LS2  18
 
 // UART Pins
 #define rx2  16
@@ -51,6 +51,7 @@ volatile float EMAprev[]      = {0,0};              // for EMAprev
 volatile float linearValue[]  = {0,0};              // Axis linear value
 float setPoint[]     = {0,0};                       // The setpoints
 uint32_t staticTime[]= {0,0};                       // stabilize chepoint
+volatile bool TmVis = false;
 
 // PID params and Vars
 #define PID_Kp 1
@@ -85,6 +86,8 @@ void IRAM_ATTR Measure(){
 
   // PID(0, linearValue[MOT1], &MOT1CS);
   // PID(0, linearValue[MOT2], &MOT2CS);
+  TmVis = !TmVis;
+  digitalWrite(2,TmVis);
 }
 
 
@@ -150,7 +153,7 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Starting Setup");
   // Start Serial port with Server from UART
-  daServer.begin(9600);
+  daServer.begin(9600,SERIAL_8N1,rx2,tx2);
   // Timer at Clk hz, 1 Mhz is used to have 1us steps
   timer = timerBegin(Clk);
   // interrupt using the address of the ISR
@@ -185,8 +188,8 @@ void loop() {
   SPHandler(&setPoint[MOT1],linearValue[MOT1],&staticTime[MOT1]);
   SPHandler(&setPoint[MOT2],linearValue[MOT2],&staticTime[MOT2]);
 
-  CSMotCtrl(setPoint[MOT1],MOT1,1);
-  CSMotCtrl(setPoint[MOT2],MOT2,1);
+  // CSMotCtrl(setPoint[MOT1],MOT1,1);
+  // CSMotCtrl(setPoint[MOT2],MOT2,1);
 
   serialInform();
 
