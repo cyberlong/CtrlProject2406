@@ -148,6 +148,7 @@ void UpDtEnc(volatile uint32_t* Ltiem, volatile int* encVal, uint8_t pins[]){
 
 void setup() {
   Serial.begin(9600);
+  Serial.println("Starting Setup");
   // Start Serial port with Server from UART
   daServer.begin(9600);
   // Timer at Clk hz, 1 Mhz is used to have 1us steps
@@ -161,6 +162,7 @@ void setup() {
   // call an interrupt every n us, 
   // our Tm is 30 ms so that's that
   timerAlarm(timer,Tm*ms,true,0);
+  Serial.println("Finished Setup");
 }
 
 
@@ -169,9 +171,9 @@ void setup() {
 void loop() {
 
   serialEvent();
-  serialAssign();
 
   if (thereIsInput){
+    serialAssign();
     // do smth
     
     
@@ -322,7 +324,7 @@ void db_AxisLCDprint(){
 
 void db_LinearLCDprint(){
   String a = "";
-  a += "X:";
+  a += "X:";  
   a += linearValue[MOT1];
   a += ",Y:";
   a += linearValue[MOT2];
