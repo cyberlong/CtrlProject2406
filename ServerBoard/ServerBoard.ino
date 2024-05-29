@@ -5,6 +5,9 @@
 #include "Pages.h"
 #include "CustomChars.h"
 
+// UART Pins
+#define rx2  16
+#define tx2  17
 
 // WiFi connect
 #define WbQty 4
@@ -31,7 +34,7 @@ bool plzSP = false;
 void setup() {
   Serial.begin(9600);
   // Start Serial port with Server from UART
-  daController.begin(9600);
+  daController.begin(9600,SERIAL_8N1,rx2,tx2);
   // Initialize the LCD through I2C, along with custom chars
   LCDinit();
   // Starts the connection process to WiFi
@@ -185,6 +188,8 @@ void InitWiFiCon(){
     tryIndex = ++tryIndex % WbQty;
     WiFi.begin(ssid[tryIndex], password[tryIndex]);
 
+    lcd.setCursor (0, 0);
+    lcd.print("               ");
     lcd.setCursor (0, 0); // set 0 0... wow, don't you say, rlly??? awesome
     lcd.print(ssid[tryIndex]);      // web name is on LCD
     
