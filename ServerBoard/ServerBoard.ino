@@ -22,12 +22,14 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 HardwareSerial daController(2);
 
 // UART vars
-String iStr = "";
+const byte numChars = 32; // Max Parsing chars
+char iStr[numChars]; // Message buffer
 bool thereIsInput = false;
+bool recvInProgress = false;
 float nextSP[] = {0,0};
 char *ptr = NULL;
 char *strings[8];
-bool plzSP = false;
+uint16_t CtrlOrder = 0;
 
 
 //    <===========================SETUP==============================>
@@ -55,32 +57,55 @@ void loop() {
   serialEvent();
   
   // When the Controller sends a message, what to do?
-  if (thereIsInput){
-    serialAssign();
+  if (thereIsInput && !recvInProgress){
     // do smth
+    // Serial.println(iStr);
     
     // reset
-    iStr = "";
+    serialAssign();
+    iStrClean();
     thereIsInput = false;
   }
 
   serialInform();
 
-  delay(5);
+  delay(10);
 }
 
-void serialEvent(){
-  while (daController.available() > 0){
-    char c = (char) daController.read();
-    if (c != '\n'){
-      iStr += c;
-    } else {
-      iStr.trim();
-      thereIsInput = true;
-    }
+void iStrClean(){
+  for (int i = 0 ; i < numChars ; i++){
+    iStr[i] = '\0';
   }
 }
 
+void serialEvent() {
+  static byte ndx = 0;
+  char startMarker = '<';
+  char endMarker = '>';
+  char rc; // char buffer
+ 
+  while (daController.available() > 0 && thereIsInput == false) {
+    rc = daController.read();
+
+    if (recvInProgress == true) {       // while the end marker isn't sent
+      if (rc != endMarker) {          // it accumulates the recieved chars
+        iStr[ndx] = rc;    // in the Message buffer
+        ndx++;
+        if (ndx >= numChars) {
+            ndx = numChars - 1;
+        }
+      }
+      else {
+        iStr[ndx] = '\0';  // if the end marker is sent
+        recvInProgress = false;     // ends the string
+        ndx = 0;                    // and the new data flag
+        thereIsInput = true;             // is sent to true
+      }
+    } else if (rc == startMarker) { // if the starter marker is sent
+        recvInProgress = true;    // receiving process starts
+    }
+  }
+}
   // Str format: "a:112,b:124,c:e\n";
   // We finish a message with '\n' from println();
   // Every pair of information we separate with a comma ',';
@@ -88,20 +113,17 @@ void serialEvent(){
   // This is basically a Json RipOff.
 void serialInform(){
   String forward = "";
-  // forward += S_NextSPx + ':'; // next X SP
+  forward += '<'; // S_NextSPx + ':'; // next X SP
   forward += 420;
   forward += ','; //+ S_NextSPy + ':'; // next Y SP
   forward += 69;
   forward += ','; //+ S_WiFiOK + ':'; // is WiFi Ok?
   forward += WiFi.status() == WL_CONNECTED;
-  forward += ','; //+ S_SSID + ':'; // what is the connected SSID
-  forward += ssid[tryIndex];
-  forward += ','; //+ S_IP + ':'; // Connection IP plz
-  forward += WiFi.localIP();
   forward += ','; //+ S_ScreenX + ':'; // current X Screen Pos
   forward += 69;
   forward += ','; //+ S_ScreenY + ':'; // current Y Screen Pos
   forward += 420;
+  forward += '>';
   
   daController.println(forward);
 
@@ -109,29 +131,19 @@ void serialInform(){
 }
 
 void serialAssign(){
-  Serial.println("31");
   byte index = 0;
-  Serial.println("32");
-  char buffer[sizeof(iStr)];
-  Serial.println("33");
-  iStr.toCharArray(buffer, iStr.length()+1);
-  Serial.println("34");
-  ptr = strtok(buffer, ",");  // delimiter
-  Serial.println("35");
+  ptr = strtok(iStr, ",");  // delimiter
   while (ptr != NULL)
   {
-    Serial.println(index);
-    strings[index] = ptr;
-    index++;
-    ptr = strtok(NULL, ",");
+     strings[index] = ptr;
+     index++;
+     ptr = strtok(NULL, ",");
   }
-  Serial.println("36");
-  Serial.println(strings[0]);
-  plzSP = atoi(strings[0]);
-  Serial.println("37");
 
-   
+  CtrlOrder  = atoi(strings[0]);
 }
+   
+// }
 
 //    <===========================WEB_PAGES==============================>
 void Lobby(){ // Starting page
