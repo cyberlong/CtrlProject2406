@@ -3,11 +3,20 @@
 
 // Motor Pins
 #define MOT1P 15
-#define MOT1N 2
+#define MOT1N 18
 #define MOT2P 4
 #define MOT2N 5
 #define MOT1  0
 #define MOT2  1
+
+// PWM values
+#define PWMfreq    5000
+#define PWMresolution 8
+#define PWM_M1_A      0
+#define PWM_M1_B      1
+#define PWM_M2_A      2
+#define PWM_M2_B      3
+#define maxPWM      255
 
 // Pins of the encoders
 #define CodA 14
@@ -17,7 +26,7 @@
 
 // Pins of the Limit Switches
 #define LS1  12
-#define LS2  18
+#define LS2  19
 
 // UART Pins
 #define rx2  16
@@ -66,16 +75,17 @@ portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 HardwareSerial daServer(2);
 
 // UART vars
-String iStr = "";
+const byte numChars = 32; // Max Parsing chars
+char iStr[numChars]; // Message buffer
 bool thereIsInput = false;
+bool recvInProgress = false;
 bool requestSP = false;
-char *ptr = NULL;
-char *strings[8];
 float newSP[] = {0,0};
 bool  isWiFiOk = false;
-char  ssid[20];
-char  ipaddress[20];
 float scrPos[] = {0,0};
+char* ptr;
+char* strings[10];
+
 
 //    <===========================Asyncronous Functions==============================>
 
@@ -165,7 +175,28 @@ void setup() {
   // call an interrupt every n us, 
   // our Tm is 30 ms so that's that
   timerAlarm(timer,Tm*ms,true,0);
+  // start axes at 0
+  calibrate();
+  // end
   Serial.println("Finished Setup");
+}
+
+void calibrate(){
+  Serial.println("Calibrating X");
+  bool a = digitalRead(LS1);
+  while(a){
+    SingleMOTCtrl(MOT1, maxPWM, 1, 0);
+    a = digitalRead(LS1);
+  } SingleMOTCtrl(MOT1, 0, 0, 1);
+
+  Serial.println("Calibrating Y");
+  bool b = digitalRead(LS2);
+  while(b){
+    SingleMOTCtrl(MOT2, maxPWM, 1, 0);
+    b = digitalRead(LS2);
+  } SingleMOTCtrl(MOT2, 0, 0, 1);
+
+  Serial.println("Ending Calibration");
 }
 
 
@@ -175,15 +206,21 @@ void loop() {
 
   serialEvent();
 
-  if (thereIsInput){
-    serialAssign();
+  if (thereIsInput && !recvInProgress){
+    // serialAssign();
     // do smth
-    
+    // Serial.println(iStr);
     
     // reset
-    iStr = "";
+    serialAssign();
+    iStrClean();
     thereIsInput = false;
   }
+
+  ///
+
+
+  ///
 
   SPHandler(&setPoint[MOT1],linearValue[MOT1],&staticTime[MOT1]);
   SPHandler(&setPoint[MOT2],linearValue[MOT2],&staticTime[MOT2]);
@@ -194,19 +231,44 @@ void loop() {
   serialInform();
 
   // Debug
-  db_LinearLCDprint();
+  // db_LinearLCDprint();
+  // db_values();
+  db_stats();
 
-  delay(5);
+  delay(100);
 }
 
-void serialEvent(){
-  while (daServer.available() > 0){
-    char c = (char) daServer.read();
-    if (c != '\n'){
-      iStr += c;
-    } else {
-      iStr.trim();
-      thereIsInput = true;
+void iStrClean(){
+  for (int i = 0 ; i < numChars ; i++){
+    iStr[i] = '\0';
+  }
+}
+
+void serialEvent() {
+  static byte ndx = 0;
+  char startMarker = '<';
+  char endMarker = '>';
+  char rc; // char buffer
+ 
+  while (daServer.available() > 0 && thereIsInput == false) {
+    rc = daServer.read();
+
+    if (recvInProgress == true) {       // while the end marker isn't sent
+      if (rc != endMarker) {          // it accumulates the recieved chars
+        iStr[ndx] = rc;    // in the Message buffer
+        ndx++;
+        if (ndx >= numChars) {
+            ndx = numChars - 1;
+        }
+      }
+      else {
+        iStr[ndx] = '\0';  // if the end marker is sent
+        recvInProgress = false;     // ends the string
+        ndx = 0;                    // and the new data flag
+        thereIsInput = true;             // is sent to true
+      }
+    } else if (rc == startMarker) { // if the starter marker is sent
+        recvInProgress = true;    // receiving process starts
     }
   }
 }
@@ -218,7 +280,10 @@ void serialEvent(){
 void serialInform(){
   String forward = "";
   // forward += S_ReqSP + ':'; // Request a Setpoint
+  forward += '<';
   forward += requestSP; 
+  forward += '>';
+
   daServer.println(forward);
 
   if (0) Serial.println(forward);
@@ -226,9 +291,7 @@ void serialInform(){
 
 void serialAssign(){
   byte index = 0;
-  char buffer[sizeof(iStr)];
-  iStr.toCharArray(buffer, iStr.length()+1);
-  ptr = strtok(buffer, ",");  // delimiter
+  ptr = strtok(iStr, ",");  // delimiter
   while (ptr != NULL)
   {
      strings[index] = ptr;
@@ -239,10 +302,8 @@ void serialAssign(){
   newSP[0]  = atof(strings[0]);
   newSP[1]  = atof(strings[1]);
   isWiFiOk  = atoi(strings[2]);
-  strncpy(ssid, strings[3],20);
-  strncpy(ipaddress,strings[4],20);
-  scrPos[0] = atof(strings[5]);
-  scrPos[1] = atof(strings[6]);
+  scrPos[0] = atof(strings[3]);
+  scrPos[1] = atof(strings[4]);
 }
 
 /* It handles the Setpoints */
@@ -287,14 +348,19 @@ float EMA(float current,volatile float *EMApv){
 //    <===========================PERIPHERALS==============================>
 
 void SingleMOTCtrl(bool MOT , uint8_t PWM, bool state, bool direction){
-  analogWrite(MOT * MOT1P + !MOT * MOT2P, state *  direction * PWM); // positive
-  analogWrite(MOT * MOT1N + !MOT * MOT2N, state * !direction * PWM); // negative
+  analogWrite(!MOT * MOT1P + MOT * MOT2P, state *  direction * PWM); // positive
+  analogWrite(!MOT * MOT1N + MOT * MOT2N, state * !direction * PWM); // negative
 }
 
 void ConfigurePins(){
-  int outputs[] = {MOT1P, MOT1N, MOT2P, MOT2N};
+  // mot pins
+  int channel[] = {PWM_M1_A, PWM_M1_B, PWM_M2_A, PWM_M2_B};
+  int outputs[] = {MOT1P   , MOT1N   , MOT2P   , MOT2N};
   for (int i = 0; i < 4; i++){ // asigning exits
-    pinMode(outputs[i],3);
+      // PWM setup
+    // ledcSetup(channel[i], PWMfreq, PWMresolution);
+    ledcAttach(outputs[i],PWMfreq,PWMresolution);
+    pinMode(outputs[i],OUTPUT);
   } pinMode(2,3); // Debugging purposes
 
     // Prepare the pins and interrupts of the encoders
@@ -327,9 +393,37 @@ void db_AxisLCDprint(){
 
 void db_LinearLCDprint(){
   String a = "";
-  a += "X:";  
+  a += "X: ";  
   a += linearValue[MOT1];
   a += ",Y:";
   a += linearValue[MOT2];
+  Serial.println(a);
+}
+
+void db_values(){
+  String a = "";
+  a += "Next SP: [";
+  a += String(newSP[0]);
+  a += ", ";
+  a += String(newSP[1]);
+  a += "]   ; Screen pos: [";
+  a += String(scrPos[0]);
+  a += ", ";
+  a += String(scrPos[1]);
+  a += "]   ; WiFi condition: ";
+  a += isWiFiOk;
+
+  Serial.println(a);
+}
+
+void db_stats(){
+  String a = "";
+  a += "MOT1: ";
+  a += String(linearValue[MOT1]);
+  a += "mm ;\n";
+  a += "MOT2: ";
+  a += String(linearValue[MOT2]);
+  a += "mm ;";
+
   Serial.println(a);
 }
