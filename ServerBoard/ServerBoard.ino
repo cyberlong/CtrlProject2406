@@ -5,6 +5,7 @@
 #include "Pages.h"
 #include "CustomChars.h"
 
+
 // WiFi connect
 #define WbQty 4
 const char *ssid[]     = {"Galaxy A51 5739","WUNAB_CSU","WUNAB_Jardin","TP-LINK_B0C8"};
@@ -34,27 +35,14 @@ void setup() {
   // Initialize the LCD through I2C, along with custom chars
   LCDinit();
   // Starts the connection process to WiFi
-  xTaskCreatePinnedToCore(
-        InitWiFiConTask, /* Function to implement the task */
-        "WiFiTask",     /* Name of the task */
-        4096,           /* Stack size in words */
-        NULL,           /* Task input parameter */
-        1,              /* Priority of the task */
-        NULL,           /* Task handle. */
-        0);             /* Core where the task should run */
+  InitWiFiCon();
   // Builds the structure of the sites
   BuildSites();
   // Activates the server and gives the IP
   StartServer();
   // Just some time bc why not?
   delay(2000);
-}
-
-void InitWiFiConTask(void * parameter){
-  // Serial.print("InitWiFiConTask running on core ");
-  // Serial.println(xPortGetCoreID());
-  InitWiFiCon();
-  vTaskDelete(NULL); // Delete this task when done
+  Serial.println("Starting Server Manager");
 }
 
 //    <===========================LOOPING==============================>
@@ -62,21 +50,20 @@ void loop() {
   server.handleClient(); // it explains itself
 
   serialEvent();
-  serialAssign();
   
   // When the Controller sends a message, what to do?
   if (thereIsInput){
+    serialAssign();
     // do smth
-    
     
     // reset
     iStr = "";
     thereIsInput = false;
   }
 
-    serialInform();
+  serialInform();
 
-    delay(5);
+  delay(5);
 }
 
 void serialEvent(){
@@ -119,18 +106,26 @@ void serialInform(){
 }
 
 void serialAssign(){
+  Serial.println("31");
   byte index = 0;
+  Serial.println("32");
   char buffer[sizeof(iStr)];
+  Serial.println("33");
   iStr.toCharArray(buffer, iStr.length()+1);
+  Serial.println("34");
   ptr = strtok(buffer, ",");  // delimiter
+  Serial.println("35");
   while (ptr != NULL)
   {
-     strings[index] = ptr;
-     index++;
-     ptr = strtok(NULL, ",");
+    Serial.println(index);
+    strings[index] = ptr;
+    index++;
+    ptr = strtok(NULL, ",");
   }
-
-   plzSP = atoi(strings[0]);
+  Serial.println("36");
+  Serial.println(strings[0]);
+  plzSP = atoi(strings[0]);
+  Serial.println("37");
 
    
 }
