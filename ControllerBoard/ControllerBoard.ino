@@ -63,9 +63,9 @@ uint32_t staticTime[]= {0,0};                       // stabilize chepoint
 volatile bool TmVis = false;
 
 // PID params and Vars
-#define PID_Kp 0.5
+#define PID_Kp -3.0
 #define PID_Ki 3.0
-#define PID_Kd 0.03
+#define PID_Kd 0.74
 float PID_Emem = 0;
 float PID_Imem = 0;
 
@@ -98,8 +98,8 @@ void IRAM_ATTR Measure(){
   // PID(0, linearValue[MOT2], &MOT2CS);
   // CSMotCtrl(MOT2CS,MOT2,1);
 
-  TmVis = !TmVis;
-  digitalWrite(2,TmVis);
+  // TmVis = !TmVis;
+  // digitalWrite(2,TmVis);
 }
 
 
@@ -140,22 +140,25 @@ void IRAM_ATTR updateEncoderB(){
 
 //      <<<=|Update encoder Value Function|=>>>
 void UpDtEnc(volatile uint32_t* Ltiem, volatile int* encVal, uint8_t pins[]){
-  if ((millis() - (*Ltiem)) < 10)  // debounce time is 10ms
-    // If it's called before the cooldown period, it doesn't update
-    return;
+  try {
+    int MSB = digitalRead(pins[0]); //MSB = most significant bit
+    int LSB = digitalRead(pins[1]); //LSB = least significant bit
   
-  int MSB = digitalRead(pins[0]); //MSB = most significant bit
-  int LSB = digitalRead(pins[1]); //LSB = least significant bit
-  
-  // This represents the current encoder state
-  int encoded = (MSB << 1) | LSB; //converting the 2 pin value to single number
-  // And with this we unify with the previous value
-  int sum  = (*Ltiem << 2) | encoded; //adding it to the previous encoded value
-  // Then we compare on a lookup table and add or substract from the encoder
-  if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) (*encVal) ++;
-  if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) (*encVal) --;
+    // This represents the current encoder state
+    int encoded = (MSB << 1) | LSB; //converting the 2 pin value to single number
+    // And with this we unify with the previous value
+    int sum  = (*Ltiem << 2) | encoded; //adding it to the previous encoded value
+    // Then we compare on a lookup table and add or substract from the encoder
+    // Serial.println('a');
+    digitalWrite(2,1);
+    if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) (*encVal) ++;
+    if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) (*encVal) --;
+    digitalWrite(2,0);
 
-  *Ltiem = encoded; //store this value for next time
+    *Ltiem = encoded; //store this value for next time
+  } catch(...) {
+    throw 69420;
+  }
 }
 
 
@@ -217,16 +220,21 @@ void calibrate(){
 //    <===========================LOOPING==============================>
 
 void loop() {
-  // serialEvent();
-
+  // Serial.println('a');
+  serialEvent();
+  db_iStr();
+  // Serial.println('b');
   if (thereIsInput && !recvInProgress){
     // serialAssign();
     // do smth
     // Serial.println(iStr);
     
     // // reset
-    // serialAssign();
-    // iStrClean();
+    // Serial.println('c');
+    serialAssign();
+    // Serial.println('d');
+    iStrClean();
+    // Serial.println('e');
     thereIsInput = false;
   }
 
@@ -234,7 +242,7 @@ void loop() {
 
 
   ///
-
+  // Serial.println('f');
   CSMotCtrl(MOT1CS,MOT1,1);
 
   // SPHandler(&setPoint[MOT1],linearValue[MOT1],&staticTime[MOT1]);
@@ -243,8 +251,10 @@ void loop() {
 
   // Debug
   // db_LinearLCDprint();
-  db_values();
-  db_stats();
+  // Serial.println('g');
+  // db_values();
+  // Serial.println('h');
+  // db_stats();
 
   delay(100);
 }
@@ -255,8 +265,7 @@ void iStrClean(){
   }
 }
 
-char* serialEvent() {
-  char daStr[64];
+void serialEvent() {
   static byte ndx = 0;
   char startMarker = '<';
   char endMarker = '>';
@@ -267,14 +276,14 @@ char* serialEvent() {
 
     if (recvInProgress == true) {       // while the end marker isn't sent
       if (rc != endMarker) {          // it accumulates the recieved chars
-        daStr[ndx] = rc;    // in the Message buffer
+        iStr[ndx] = rc;    // in the Message buffer
         ndx++;
         if (ndx >= numChars) {
             ndx = numChars - 1;
         }
       }
       else {
-        daStr[ndx] = '\0';  // if the end marker is sent
+        iStr[ndx] = '\0';  // if the end marker is sent
         recvInProgress = false;     // ends the string
         ndx = 0;                    // and the new data flag
         thereIsInput = true;             // is sent to true
@@ -283,7 +292,6 @@ char* serialEvent() {
         recvInProgress = true;    // receiving process starts
     }
   }
-  return daStr;
 }
 
   // Str format: "a:112,b:124,c:e\n";
@@ -451,6 +459,10 @@ void db_stats(){
 
     Serial.println(a);
   } catch(...){
-    Serial.println("Error in Db");
+    Serial.println("Error in db");
   }
+}
+
+void db_iStr(){
+  Serial.println(iStr);
 }
