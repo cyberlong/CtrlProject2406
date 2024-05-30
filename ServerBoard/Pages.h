@@ -1,21 +1,21 @@
 /* ToDo:
 [X] List of WiFi Addreses
-[ ] The actual sites
+[X] The actual sites
 >  [ ] Paint Js
 >  [X] CSS
 >  [X] HTML
-[ ] comms site <=> uC
-[ ] The controller
-[ ] Auto tunning maybe
+[X] comms site <=> uC
+[X] The controller
+[/] Set 0
 */
 
 // I won't comment the HTML code, so forget 'bout it
 
 // site variables
-String openLoop = "<html><h1>this shi aint workin</h1></html>";
-String lobby = "<html><h1>this shi aint workin</h1></html>";
-String notebook = "<html><h1>this shi aint workin</h1></html>";
-String canvas = "<html><h1>this shi aint workin</h1></html>";
+String openLoop = "<html><h1>this aint workin</h1></html>";
+String lobby = "<html><h1>this aint workin</h1></html>";
+String notebook = "<html><h1>this aint workin</h1></html>";
+String canvas = "<html><h1>this aint workin</h1></html>";
 
 void BuildSites (){
 // Building the sites
@@ -64,7 +64,7 @@ void BuildSites (){
 	canvas +=  	"<p id='context'>Dibuja en el siguiente recuadro el camino que se desea";
 	canvas +=  		"que la maquina siga, luego presione \"Hecho\" para mandar la instrucción.";
 	canvas +=  	"</p> <div class='bottom-container'>";
-	canvas +=  		"<img src='https://i.pinimg.com/originals/eb/ce/e7/ebcee7e05c657721afdaee9ff6141e70.png'>";
+	canvas +=  		"<canvas class='square drawing-area sender'></canvas>";
 	canvas +=  	"</div> <div id='button-container'> <div id='back' class='ui-button'>";
 	canvas +=  			"<img class='icon' src='https://www.svgrepo.com/show/500472/back.svg'>";
 	canvas +=  			"<a href='../'><button class='button'>Atras</button></a>";
@@ -80,8 +80,8 @@ void BuildSites (){
 	notebook +=  "</head> <body> <h1 class='title'>Notebook</h1> <p id='context'>";
 	notebook +=  		"Esto es el cuaderno de la maquina. Esta debijará en esta pagina siguiendo";
 	notebook +=  		"el camino que se le haya marcado en el Canvas.";
-	notebook +=  	"</p> <div class='bottom-container'>";
-	notebook +=  		"<img src='https://i.pinimg.com/originals/eb/ce/e7/ebcee7e05c657721afdaee9ff6141e70.png'> </div> </body> </html>";
+	notebook +=  	"</p> <div class='bottom-container'> <div class='bottom-container'>";
+	notebook +=  		"<canvas class='square drawing-area sender'></canvas> </div> </div> </body> </html>";
 
 }
 
