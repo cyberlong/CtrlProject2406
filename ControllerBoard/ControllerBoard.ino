@@ -95,8 +95,8 @@ void IRAM_ATTR Measure(){
   linearValue[MOT2] = EMA(updtLinearPos(encoderValue[MOT2]), &EMAprev[MOT2]);
 
   PID(50, linearValue[MOT1], &MOT1CS);
-  // PID(0, linearValue[MOT2], &MOT2CS);
-  // CSMotCtrl(MOT2CS,MOT2,1);
+  PID(0, linearValue[MOT2], &MOT2CS);
+
 
   // TmVis = !TmVis;
   // digitalWrite(2,TmVis);
@@ -244,10 +244,11 @@ void loop() {
   ///
   // Serial.println('f');
   CSMotCtrl(MOT1CS,MOT1,1);
+  CSMotCtrl(MOT2CS,MOT2,1);
 
-  // SPHandler(&setPoint[MOT1],linearValue[MOT1],&staticTime[MOT1]);
-  // SPHandler(&setPoint[MOT2],linearValue[MOT2],&staticTime[MOT2]);
-  // serialInform();
+  SPHandler(&setPoint[MOT1],linearValue[MOT1],&staticTime[MOT1]);
+  SPHandler(&setPoint[MOT2],linearValue[MOT2],&staticTime[MOT2]);
+  serialInform();
 
   // Debug
   // db_LinearLCDprint();
