@@ -39,8 +39,8 @@ uint8_t MOT1S = 0;  // PWM Signal
 uint8_t MOT2S = 0;
 bool MOT1O = 0;     // On/Off
 bool MOT2O = 0;
-volatile int MOT1CS = 0;     // Control Signal
-volatile int MOT2CS = 0;
+volatile float MOT1CS = 0;     // Control Signal
+volatile float MOT2CS = 0;
 
 // Setup Control Parameters and variables
 #define Clk 1e6 // 1Mhz
@@ -63,9 +63,9 @@ uint32_t staticTime[]= {0,0};                       // stabilize chepoint
 volatile bool TmVis = false;
 
 // PID params and Vars
-#define PID_Kp 1
-#define PID_Ki 2
-#define PID_Kd 3
+#define PID_Kp 0.5
+#define PID_Ki 3.0
+#define PID_Kd 0.03
 float PID_Emem = 0;
 float PID_Imem = 0;
 
@@ -75,7 +75,7 @@ portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 HardwareSerial daServer(2);
 
 // UART vars
-const byte numChars = 32; // Max Parsing chars
+const byte numChars = 64; // Max Parsing chars
 char iStr[numChars]; // Message buffer
 bool thereIsInput = false;
 bool recvInProgress = false;
@@ -94,8 +94,10 @@ void IRAM_ATTR Measure(){
   linearValue[MOT1] = EMA(updtLinearPos(encoderValue[MOT1]), &EMAprev[MOT1]);
   linearValue[MOT2] = EMA(updtLinearPos(encoderValue[MOT2]), &EMAprev[MOT2]);
 
-  // PID(0, linearValue[MOT1], &MOT1CS);
+  PID(50, linearValue[MOT1], &MOT1CS);
   // PID(0, linearValue[MOT2], &MOT2CS);
+  // CSMotCtrl(MOT2CS,MOT2,1);
+
   TmVis = !TmVis;
   digitalWrite(2,TmVis);
 }
@@ -172,29 +174,41 @@ void setup() {
   ConfigurePins();
   // Just some time bc why not?
   delay(2000);
+  // start axes at 0
+  calibrate();
   // call an interrupt every n us, 
   // our Tm is 30 ms so that's that
   timerAlarm(timer,Tm*ms,true,0);
-  // start axes at 0
-  calibrate();
   // end
   Serial.println("Finished Setup");
 }
 
 void calibrate(){
-  Serial.println("Calibrating X");
-  bool a = digitalRead(LS1);
-  while(a){
+  try {
+    Serial.println("Calibrating X");
+    bool a = digitalRead(LS1);
     SingleMOTCtrl(MOT1, maxPWM, 1, 0);
-    a = digitalRead(LS1);
-  } SingleMOTCtrl(MOT1, 0, 0, 1);
+    while(a){
+      a = digitalRead(LS1);
+      // Serial.println(a);
+      delay(20);
+    } SingleMOTCtrl(MOT1, 0, 0, 1);
+  } catch(...){
+    Serial.println("Error on Cali X");
+  }
 
-  Serial.println("Calibrating Y");
-  bool b = digitalRead(LS2);
-  while(b){
+  try {
+    Serial.println("Calibrating Y");
+    bool b = digitalRead(LS2);
     SingleMOTCtrl(MOT2, maxPWM, 1, 0);
-    b = digitalRead(LS2);
-  } SingleMOTCtrl(MOT2, 0, 0, 1);
+    while(b){
+      b = digitalRead(LS2);
+      // Serial.println(b);
+      delay(20);
+    } SingleMOTCtrl(MOT2, 0, 0, 1);
+  } catch(...){
+    Serial.println("Error on Cali Y");
+  }
 
   Serial.println("Ending Calibration");
 }
@@ -203,17 +217,16 @@ void calibrate(){
 //    <===========================LOOPING==============================>
 
 void loop() {
-
-  serialEvent();
+  // serialEvent();
 
   if (thereIsInput && !recvInProgress){
     // serialAssign();
     // do smth
     // Serial.println(iStr);
     
-    // reset
-    serialAssign();
-    iStrClean();
+    // // reset
+    // serialAssign();
+    // iStrClean();
     thereIsInput = false;
   }
 
@@ -222,17 +235,15 @@ void loop() {
 
   ///
 
-  SPHandler(&setPoint[MOT1],linearValue[MOT1],&staticTime[MOT1]);
-  SPHandler(&setPoint[MOT2],linearValue[MOT2],&staticTime[MOT2]);
+  CSMotCtrl(MOT1CS,MOT1,1);
 
-  // CSMotCtrl(setPoint[MOT1],MOT1,1);
-  // CSMotCtrl(setPoint[MOT2],MOT2,1);
-
-  serialInform();
+  // SPHandler(&setPoint[MOT1],linearValue[MOT1],&staticTime[MOT1]);
+  // SPHandler(&setPoint[MOT2],linearValue[MOT2],&staticTime[MOT2]);
+  // serialInform();
 
   // Debug
   // db_LinearLCDprint();
-  // db_values();
+  db_values();
   db_stats();
 
   delay(100);
@@ -244,7 +255,8 @@ void iStrClean(){
   }
 }
 
-void serialEvent() {
+char* serialEvent() {
+  char daStr[64];
   static byte ndx = 0;
   char startMarker = '<';
   char endMarker = '>';
@@ -255,14 +267,14 @@ void serialEvent() {
 
     if (recvInProgress == true) {       // while the end marker isn't sent
       if (rc != endMarker) {          // it accumulates the recieved chars
-        iStr[ndx] = rc;    // in the Message buffer
+        daStr[ndx] = rc;    // in the Message buffer
         ndx++;
         if (ndx >= numChars) {
             ndx = numChars - 1;
         }
       }
       else {
-        iStr[ndx] = '\0';  // if the end marker is sent
+        daStr[ndx] = '\0';  // if the end marker is sent
         recvInProgress = false;     // ends the string
         ndx = 0;                    // and the new data flag
         thereIsInput = true;             // is sent to true
@@ -271,6 +283,7 @@ void serialEvent() {
         recvInProgress = true;    // receiving process starts
     }
   }
+  return daStr;
 }
 
   // Str format: "a:112,b:124,c:e\n";
@@ -319,23 +332,31 @@ void SPHandler(float* currentSP, volatile float PV, uint32_t* StaTime){
 }
 
 void CSMotCtrl(float CS, bool MOT, bool isOn){
-  uint8_t daPWM  = abs(CS);
-  bool direction = CS > 0 ? 1 : 0;
-  SingleMOTCtrl(MOT, daPWM, isOn, direction);
+  try {
+    uint8_t daPWM  = abs(CS);
+    bool direction = CS > 0 ? 1 : 0;
+    SingleMOTCtrl(MOT, daPWM, isOn, direction);
+  } catch(...){
+    Serial.println("Error on CS");
+  }
 }
 
-void PID (float SeP, float PV, volatile int* CtrlVar){
-  float En = SeP - PV;
-  float csP = PID_Kp*En;
-  float csD = PID_Kd*(En - PID_Emem);
-  float Eni = En + PID_Imem;
-  float csI = PID_Ki*Eni;
-  float cs = csP + csI + csD;
-  if (cs >  100) cs =  100.0;
-  if (cs < -100) cs = -100.0;
-  *CtrlVar = 255.0 * cs/100.0;
-  PID_Emem = En;
-  PID_Imem = Eni;
+void PID (float SeP, float PV, volatile float* CtrlVar){
+  try {
+    float En = SeP - PV;
+    float csP = PID_Kp*En;
+    float csD = PID_Kd*(En - PID_Emem);
+    float Eni = En + PID_Imem;
+    float csI = PID_Ki*Eni;
+    float cs = csP + csI + csD;
+    if (cs >  100) cs =  100.0;
+    if (cs < -100) cs = -100.0;
+    *CtrlVar = 255.0 * cs/100.0;
+    PID_Emem = En;
+    PID_Imem = Eni;
+  } catch(...){
+    Serial.println("Error on PID");
+  }
 }
 
 float EMA(float current,volatile float *EMApv){
@@ -373,10 +394,10 @@ void ConfigurePins(){
   attachInterrupt(digitalPinToInterrupt(CodA), updateEncoderA, CHANGE);  // Interrupt
   attachInterrupt(digitalPinToInterrupt(CodB), updateEncoderA, CHANGE);  // Interrupt
   // Prepare the pins and interrupts of the limit switches
-  pinMode(LS1, INPUT_PULLUP); // Turn pullup resistor on
-  pinMode(LS2, INPUT_PULLUP); // Turn pullup resistor on
   attachInterrupt(LS1, setXas0, FALLING);  // Interrupt
   attachInterrupt(LS2, setYas0, FALLING);  // Interrupt
+  pinMode(LS1, INPUT_PULLUP); // Turn pullup resistor on
+  pinMode(LS2, INPUT_PULLUP); // Turn pullup resistor on
 }
 
 
@@ -417,13 +438,19 @@ void db_values(){
 }
 
 void db_stats(){
-  String a = "";
-  a += "MOT1: ";
-  a += String(linearValue[MOT1]);
-  a += "mm ;\n";
-  a += "MOT2: ";
-  a += String(linearValue[MOT2]);
-  a += "mm ;";
+  try {
+    String a = "";
+    a += "MOT1:";
+    a += String(linearValue[MOT1]);
+    a += ",CS1:";
+    a += String(MOT1CS);
+    a += ",MOT2:";
+    a += String(linearValue[MOT2]);
+    a += ",CS2:";
+    a += String(MOT2CS);
 
-  Serial.println(a);
+    Serial.println(a);
+  } catch(...){
+    Serial.println("Error in Db");
+  }
 }
